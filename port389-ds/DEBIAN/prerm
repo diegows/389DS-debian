@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# stop the dirsrv
+/etc/init.d/dirsrv stop >/dev/null 2>&1 || :

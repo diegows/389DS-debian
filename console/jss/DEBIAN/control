@@ -1,0 +1,15 @@
+Source: SOURCE
+Package: libjss
+Version: VERSION
+Section: net
+Priority: extra
+Architecture: amd64
+Installed-Size: SIZE
+Maintainer: MAINTAINER
+Description:  Netscape Security Services for Java (JSS)
+ is an interface allowing Java applications to use the Secure Sockets Layer protocol. 
+ The interface is implemented with the FIPS-validated Netscape Security Services library.
+ It consists of a system-dependent dynamic library (libjss.so on UNIX, jss.dll on Windows) 
+ and a ZIP file (jss.zip) containing system-independent Java classes. These classes are 
+ compatible with JDK 1.1 or later using the native thread implementation (not green threads).
+

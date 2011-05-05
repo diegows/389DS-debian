@@ -1,0 +1,14 @@
+Source:	SOURCE
+Package: port389-ds-console
+Version: VERSION
+Section: net
+Priority: extra
+Architecture: all
+Depends: PKGDEPS
+Installed-Size: SIZE
+Maintainer: MAINTAINER
+Description: Fedora Directory Server Management Console
+ A Java based remote management console used for Managing Fedora
+ Directory Server.
+ .
+

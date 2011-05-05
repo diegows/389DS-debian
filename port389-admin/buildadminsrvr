@@ -1,0 +1,138 @@
+#!/bin/bash
+
+source ../config
+SCRIPTDIR=`pwd`
+find $SCRIPTDIR -type d -name CVS |xargs rm -rf
+find $SCRIPTDIR -name *\~ |xargs rm -rf
+
+
+if [ -z $1 ]; then
+		BUILDDIR=/tmp/fdsbuildscripts/port389-admin
+else
+	BUILDDIR=$1
+fi
+
+
+VERSION=1.1.16
+WORKROOT=$BUILDDIR/389-admin-$VERSION
+FDSADMIN=$BUILDDIR/pkg
+
+[ ! -d $DEBS ] && mkdir -p $DEBS
+[ ! -d $TARBALLS ] && mkdir -p $TARBALLS
+[ ! -d $BUILDDIR ] && mkdir -p $BUILDDIR
+[ ! -d $FDSADMIN ] && mkdir -p $FDSADMIN
+
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-0d  libdb4.4 libdb4.4-dev libicu36 libicu36-dev libapr1-dev libaprutil1-dev libsasl2-dev apache2-threaded-dev apache2-mpm-worker"
+	PKGDEPS="port389-adminutil, libc6, libsasl2-2, apache2-mpm-worker, apache2.2-common, libapache2-mod-nss, port389-base"
+	# mozldap.pc file is busted due to etch not shipping nspr.pc pkgconfig files.  pkg-config seems to puke on ./configure no matter what for ldapsdk due to this
+	# so we'll pkg-config for the time being.  or symlink the xulrunner-nspr.pc to nspr.pc but screw pkg-cofig :P
+	dpkg -r pkg-config
+	;;
+ 
+    lenny)
+	#LENNY
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-1d  libdb4.6 libdb4.6-dev libicu38 libicu-dev libapr1-dev libaprutil1-dev libsasl2-dev apache2-threaded-dev apache2-mpm-worker"
+	PKGDEPS="port389-adminutil, libc6, libsasl2-2, apache2-mpm-worker, apache2.2-common, libapache2-mod-nss, port389-ds-base"
+	;;
+
+    squeeze)
+        #LENNY
+        BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-1d  libdb4.8 libdb4.8-dev libicu44 libicu-dev libapr1-dev libaprutil1-dev libsasl2-dev apache2-threaded-dev apache2-mpm-worker"
+        PKGDEPS="port389-adminutil, libc6, libsasl2-2, apache2-mpm-worker, apache2.2-common, libapache2-mod-nss, port389-ds-base"
+        ;;
+
+
+    karmic)
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-1d libdb4.7 libdb4.7-dev  libicu40 libicu-dev  libapr1-dev libaprutil1-dev  libsasl2-dev apache2-threaded-dev apache2-mpm-worker"
+	PKGDEPS="port389-adminutil, libc6, libsasl2-2, apache2-mpm-worker, apache2.2-common, libapache2-mod-nss, port389-ds-base"
+	;;
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+
+
+
+# get the source tarball
+[ ! -e $TARBALLS/389-admin-$VERSION.tar.bz2 ] && wget $SERVER/$DIRECTORY/389-admin-$VERSION.tar.bz2 -O $TARBALLS/389-admin-$VERSION.tar.bz2
+
+tar jxvf $TARBALLS/389-admin-$VERSION.tar.bz2 -C $BUILDDIR
+
+if [ ! -z $NOAPT ]; then
+
+	apt-get install -y --force-yes $BUILDDEPS
+	echo "open another terminal and install mod-nss.deb svrcore.deb mozldap.deb and mozldap-dev.deb and press ENTER to continute."
+	echo "It's likely in $DEBS if you're building all the components"
+	read
+else 
+	apt-get install -y --force-yes $BUILDDEPS libapache2-mod-nss mozldap mozldap-dev libsvrcore
+fi
+
+cd $WORKROOT
+
+make clean
+
+CPPFLAGS=`/usr/bin/apxs2 -q CPPFLAGS` ./configure \
+		--enable-bundle \
+		--sysconfdir=/etc \
+		--localstatedir=/var  \
+		--datadir=/usr/share \
+		--mandir=/usr/share/man \
+		--with-modnss-lib=/usr/lib/apache2/modules \
+		--with-modnss-bin=/sbin \
+		--with-apxs=/usr/bin/apxs2 \
+		--with-apr-config \
+		--with-httpd=/usr/sbin/apache2 \
+		--with-adminutil=/usr \
+		--with-nspr-inc=/usr/include/nspr/ \
+		--with-nspr-lib=/usr/lib/ \
+		--with-nss-inc=/usr/include/nss/ \
+		--with-nss-lib=/usr/lib/ \
+		--with-icu-inc=/usr/include/unicode \
+		--with-icu-lib=/usr/lib/ \
+		--with-icu-bin=/usr/bin/ \
+		--with-ldapsdk-inc=/usr/include/mozldap/ \
+		--with-ldapsdk-lib=/usr/lib/ \
+		--with-ldapsdk-bin=/usr/lib/mozldap \
+		--with-sasl \
+		--with-modnss-lib=/usr/lib/ \
+		--with-modnss-bin=/sbin/ 
+
+
+
+make
+make DESTDIR=$FDSADMIN install
+
+# patches and debianizations here
+mkdir $FDSADMIN/usr/share/dirsrv/html/java
+mv $FDSADMIN/etc/rc.d/init.d $FDSADMIN/etc/
+rm -rf $FDSADMIN/etc/rc.d
+cp -R $SCRIPTDIR/DEBIAN $FDSADMIN
+# fix httpd.conf
+sed -i 's/LoadModule\ log_config_module/\#LoadModule\ log_config_module/' $FDSADMIN/etc/dirsrv/admin-serv/httpd.conf
+sed -i 's/\/opt\/dirsrv\/lib\/dirsrv\/modules\/libmodnss.so/\/usr\/lib\/apache2\/modules\/libmodnss.so/g' $FDSADMIN/etc/dirsrv/admin-serv/httpd.conf
+# fix start-ds-admin script to point to the system proper libraries
+sed -i 's/\/opt\/dirsrv\/lib\/libldap60.so/\/usr\/lib\/libldap60.so/g' $FDSADMIN/opt/dirsrv/sbin/start-ds-admin
+sed -i 's/nss_libdir=\"\/opt\/dirsrv\/lib\"/nss_libdir=\"\/usr\/lib\"/g' $FDSADMIN/opt/dirsrv/sbin/start-ds-admin
+# fix nss.conf to point to the system's nss_pcache binary
+sed -i 's/\/opt\/dirsrv\/sbin\/nss_pcache/\/sbin\/nss_pcache/g' $FDSADMIN/etc/dirsrv/admin-serv/nss.conf
+
+chmod -R g-s $FDSADMIN
+
+sed -i "s/VERSION/${VERSION}/g" $FDSADMIN/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $FDSADMIN/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $FDSADMIN/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $FDSADMIN/DEBIAN/control
+cd $FDSADMIN
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/" $FDSADMIN/DEBIAN/control
+
+rm -fR $FDSADMIN/DEBIAN/.svn
+
+dpkg-deb --build $FDSADMIN $DEBS/port389-admin-$DEBVER-$VERSION.deb
+ 

@@ -1,0 +1,14 @@
+Source: SOURCE
+Package: perldap
+Version: VERSION
+Section: net
+Priority: extra
+Architecture: amd64
+Depends: PKGDEPS
+Installed-Size: SIZE
+Maintainer: MAINTAINER
+Description:  PerLDAP is a set of modules written in Perl and C 
+ that will allow developers to leverage their existing Perl 
+ knowledge to easily write to and manage LDAP-enabled directories. 
+ PerLDAP makes it very easy to search, add, delete, and update 
+ directory entries.

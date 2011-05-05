@@ -1,0 +1,115 @@
+#!/bin/bash
+# script to build perldap
+
+source ../config
+SCRIPTDIR=`pwd`
+find $SCRIPTDIR -type d -name CVS |xargs rm -rf
+find $SCRIPTDIR -name *\~ |xargs rm -rf
+
+
+if [ -z $1 ]; then
+	BUILDDIR=/tmp/fdsbuildscripts/perldap
+else
+	BUILDDIR=$1
+fi
+
+VERSION=1.5.2
+WORKROOT=$BUILDDIR/perl-mozldap-$VERSION
+PERLDAP=$BUILDDIR/pkg
+
+
+[ ! -d $BUILDDIR ] && mkdir -p $BUILDDIR
+[ ! -d $PERLDAP ] && mkdir -p $PERLDAP
+[ ! -d $DEBS ] && mkdir -p $DEBS
+[ ! -d $TARBALLS ] && mkdir -p $TARBALLS
+
+
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="perl libnspr4-dev libnss3-dev libnspr4-0d libnss3-0d"
+	PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-0d, perl"
+	;;
+ 
+    lenny)
+	#LENNY
+	BUILDDEPS="perl libnspr4-dev libnss3-dev libnspr4-0d libnss3-1d"
+	PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-1d, perl"
+	;;
+
+    squeeze)
+        #LENNY
+        BUILDDEPS="perl libnspr4-dev libnss3-dev libnspr4-0d libnss3-1d"
+        PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-1d, perl"
+        ;;
+
+ 
+    karmic)
+	BUILDDEPS="perl libnspr4-dev libnss3-dev libnspr4-0d libnss3-1d"
+	PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-1d, perl"
+	;;
+
+    lucid)
+        BUILDDEPS="perl libnspr4-dev libnss3-dev libnspr4-0d libnss3-1d"
+        PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-1d, perl"
+        ;;
+
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+
+if [ ! -z $NOAPT ]; then
+	apt-get install -y --force-yes $BUILDDEPS
+	echo "open another terminal and install mozldap, mozldap-dev and  now and hit enter to continue"
+	echo "It's likely in $DEBS if you're building all the components"
+	read
+else
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-1d mozldap mozldap-dev"
+	apt-get install -y --force-yes $BUILDDEPS mozldap mozldap-dev
+fi
+
+# get the source tarball
+# wget or cp
+
+[ ! -e $TARBALLS/perl-mozldap-$VERSION.tar.gz ] && wget $SERVER/$DIRECTORY/perl-mozldap-$VERSION.tar.gz -O $TARBALLS/perl-mozldap-$VERSION.tar.gz
+tar zxvf $TARBALLS/perl-mozldap-$VERSION.tar.gz -C $BUILDDIR
+
+export LDAPSDKINCDIR="/usr/include/mozldap/"
+export LDAPSDKDIR="/usr/"
+export LDAPSDKLIBDIR="/usr/lib"
+export NSPRINCDIR="/usr/include/nspr"
+export NSPRLIBDIR="/usr/lib"
+export NSSLIBDIR="/usr/lib"
+export LDAPSDKSSL="Y"
+
+
+cd $WORKROOT
+make clean
+
+#perl Makefile.PL DESTDIR=/usr/src/build/perldap
+perl Makefile.PL INSTALLDIRS=vendor DESTDIR=$PERLDAP
+make
+make install
+
+cp -R $SCRIPTDIR/DEBIAN $PERLDAP
+sed -i "s/VERSION/${VERSION}/g" $PERLDAP/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $PERLDAP/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $PERLDAP/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $PERLDAP/DEBIAN/control
+cd $PERLDAP
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/" $PERLDAP/DEBIAN/control
+
+
+# remove any CVS dirs that get copied with DEBIAN
+find $BUILDDIR -name CVS -type d |xargs rm -rf
+chmod -R g-s $PERLDAP
+chown -R root.root $PERLDAP
+
+rm -fR $PERLDAP/DEBIAN/.svn/
+
+dpkg-deb --build $PERLDAP $DEBS/perldap-$DEBVER-$VERSION.deb
+

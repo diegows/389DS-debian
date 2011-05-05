@@ -1,0 +1,493 @@
+#!/bin/bash
+
+# will generate libjss.deb, ldapsdk.deb and console debs
+
+source ../config
+SCRIPTDIR=`pwd`
+find $SCRIPTDIR -type d -name CVS |xargs rm -rf
+find $SCRIPTDIR -name "*~" |xargs rm -rf
+
+if [ -z $1 ]; then
+	BUILDDIR=/tmp/fdsbuildscripts/console
+else
+	BUILDDIR=$1
+fi
+
+apt-get install -y --force-yes dh-make alien debconf
+
+ANT=/usr/bin/ant
+JSS=$BUILDDIR/jss
+LDAPSDK=/$BUILDDIR/ldapsdk
+IDM_FRAMEWORK=$BUILDDIR/idm_framework
+CONSOLE=$BUILDDIR/389_console
+DS_CONSOLE=$BUILDDIR/389_ds_console
+ADMIN_CONSOLE=$BUILDDIR/389_admin_console
+
+[ ! -d $DEBS ] && mkdir -p $DEBS
+[ ! -d $TARBALLS ] && mkdir -p $TARBALLS
+[ ! -d $BUILDDIR ] && mkdir -p $BUILDDIR
+[ ! -d $FDSDIR ] && mkdir -p $FDSDIR
+[ ! -d $JSS ] && mkdir -p $JSS
+[ ! -d $LDAPSDK ] && mkdir -p $LDAPSDK
+[ ! -d $IDM_FRAMEWORK ] && mkdir -p $IDM_FRAMEWORK
+[ ! -d $CONSOLE ] && mkdir -p $CONSOLE
+[ ! -d $DS_CONSOLE ] && mkdir -p $DS_CONSOLE
+[ ! -d $ADMIN_CONSOLE ] && mkdir -p $ADMIN_CONSOLE
+
+
+export JAVA_HOME=/usr/lib/jvm/java-6-sun
+export PATH=$PATH:$JAVA_HOME/bin
+
+
+
+make_jss ()
+{
+# set JSS VERSION
+
+VERSION=4.2.5
+JSSJAR=ftp://ftp.mozilla.org/pub/mozilla.org/security/jss/releases/JSS_4_2_5_RTM/jss4.jar
+XPCLASSJAR=ftp://ftp.mozilla.org/pub/mozilla.org/security/jss/releases/JSS_4_2_5_RTM/xpclass.jar
+JSSSO=ftp://ftp.mozilla.org/pub/mozilla.org/security/jss/releases/JSS_4_2_5_RTM/Linux2.6_x86_glibc_PTH_OPT.OBJ/lib/libjss4.so
+
+# create jss file system
+mkdir -p $JSS/usr/share/java
+mkdir -p $JSS/usr/lib
+# get the 3 files
+wget $JSSJAR -O $JSS/usr/share/java/jss4.jar
+wget $XPCLASSJAR -O $JSS/usr/share/java/xpclass.jar
+wget $JSSSO -O $JSS/usr/lib/libjss4.so
+
+# copy over DEBIAN control files
+cp -R $SCRIPTDIR/jss/DEBIAN $JSS
+sed -i s/VERSION/${VERSION}/ $JSS/DEBIAN/control
+sed -i s/MAINTAINER/${MAINTAINER}/ $JSS/DEBIAN/control
+dpkg-deb -b $JSS $DEBS/libjss-$VERSION.deb
+}
+
+make_ldapsdk ()
+{ 
+# create ldapsdk,  just use alien to convert the package
+LDAPURL=http://mirrors.dotsrc.org/jpackage/1.7/generic/free/RPMS/ldapsdk-4.17-3jpp.noarch.rpm
+
+wget $LDAPURL -O $LDAPSDK/ldapsdk-4.17-3jpp.noarch.rpm
+cd $LDAPSDK
+/usr/bin/alien -dc ldapsdk-4.17-3jpp.noarch.rpm
+mkdir -p $LDAPSDK/pkg/DEBIAN
+dpkg-deb -e $LDAPSDK/ldapsdk_4.17-4_all.deb $LDAPSDK/pkg/DEBIAN/
+dpkg-deb -x $LDAPSDK/ldapsdk_4.17-4_all.deb $LDAPSDK/pkg/
+cd $LDAPSDK/pkg/usr/share/java/
+ln -s ldapsdk-4.17.jar ldapjdk.jar
+dpkg-deb -b $LDAPSDK/pkg $DEBS/ldapsdk_4.17-4_all.deb
+rm -rf $LDAPSDK/ldapsdk_4.17-4_all.deb
+
+}
+
+install_java ()
+{
+#We'll need to install and configure the java jdk
+
+echo "sun-java6-bin   shared/accepted-sun-dlj-v1-1    boolean true
+sun-java6-bin   shared/present-sun-dlj-v1-1     note
+sun-java6-jdk   shared/accepted-sun-dlj-v1-1    boolean true
+sun-java6-jdk   shared/present-sun-dlj-v1-1     note
+sun-java6-jre   shared/accepted-sun-dlj-v1-1    boolean true
+sun-java6-jre   shared/present-sun-dlj-v1-1     note
+sun-java6-jre   sun-java6-jre/jcepolicy 	note
+sun-java6-jre   sun-java6-jre/stopthread        boolean true" > /tmp/debconf-settings
+debconf-set-selections /tmp/debconf-settings
+ 
+apt-get install sun-java6-jdk 
+ 
+update-java-alternatives -s java-6-sun
+}
+
+
+make_idm_console_framework ()
+{
+##################
+#### build idm-console-framework
+##################
+
+
+case $DEBVER in
+ 
+    etch)
+	BUILDDEPS="build-essential ant bzip2"
+	PKGDEPS="java-virtual-machine | java2-runtime, libjss, ldapsdk"
+	;;
+  
+    lenny)
+	#LENNY
+	BUILDDEPS="build-essential ant bzip2 sun-java6-jdk"
+	PKGDEPS="java-virtual-machine | java2-runtime, libjss, ldapsdk"
+	;;
+
+    squeeze)
+       #LENNY
+       BUILDDEPS="build-essential ant bzip2 sun-java6-jdk"
+       PKGDEPS="java-virtual-machine | java2-runtime, libjss, ldapsdk"
+       ;;
+
+ 
+    karmic)
+	BUILDDEPS="build-essential ant bzip2 sun-java6-jdk"
+	PKGDEPS="java-virtual-machine | java2-runtime, libjss, ldapsdk"
+	;;
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+ 
+esac
+ 
+
+
+
+ # start building the idm-framework
+ VERSION=1.1.6
+ WORKROOT=$IDM_FRAMEWORK/idm-console-framework-$VERSION
+ cd $SCRIPTDIR
+ 
+ # grab tarball
+ [ ! -e $TARBALLS/idm-console-framework-$VERSION.tar.bz2 ] && wget $SERVER/$DIRECTORY/idm-console-framework-$VERSION.tar.bz2 -O $TARBALLS/idm-console-framework-$VERSION.tar.bz2
+ 
+ tar jxvf $TARBALLS/idm-console-framework-$VERSION.tar.bz2 -C $IDM_FRAMEWORK
+ 
+ if [ ! -z $NOAPT ]; then
+ 	apt-get install -y --force-yes $BUILDDEPS
+ 	echo "open another terminal and install libjss.deb ldapsdk.deb and press ENTER to continute."
+ 	echo "It's likely in $DEBS if you're building all the components"
+ 	read
+ 
+ else
+ 	apt-get install -y --force-yes $BUILDDEPS libjss ldapsdk
+ fi
+ 
+ mkdir -p $IDM_FRAMEWORK/pkg/usr/share/java/
+ mkdir -p $IDM_FRAMEWORK/built
+ cd $WORKROOT
+ $ANT	-Dbuilt.dir=$IDM_FRAMEWORK/built/ \
+ 	-Dldapjdk.local.location=/usr/share/java/ \
+ 	-Djss.local.location=/usr/share/java/ 
+ 
+ cp $IDM_FRAMEWORK/built/release/jars/* $IDM_FRAMEWORK/pkg/usr/share/java/
+ cd $IDM_FRAMEWORK/pkg/usr/share/java/
+ ln -s idm-console-nmclf-${VERSION}_en.jar idm-console-nmclf_en.jar
+ ln -s idm-console-nmclf-${VERSION}_en.jar idm-console-nmclf-1.1_en.jar
+ ln -s idm-console-nmclf-${VERSION}.jar idm-console-nmclf.jar
+ ln -s idm-console-nmclf-${VERSION}.jar idm-console-nmclf-1.1.jar
+ ln -s idm-console-mcc-${VERSION}_en.jar idm-console-mcc_en.jar
+ ln -s idm-console-mcc-${VERSION}_en.jar idm-console-mcc-1.1_en.jar
+ ln -s idm-console-mcc-${VERSION}.jar idm-console-mcc.jar
+ ln -s idm-console-mcc-${VERSION}.jar idm-console-mcc-1.1.jar
+ ln -s idm-console-base-${VERSION}.jar idm-console-base.jar
+ ln -s idm-console-base-${VERSION}.jar idm-console-base-1.1.jar
+ 
+ cp -R $SCRIPTDIR/idm_framework/DEBIAN $IDM_FRAMEWORK/pkg
+ sed -i "s/VERSION/${VERSION}/g" $IDM_FRAMEWORK/pkg/DEBIAN/control
+ sed -i "s/MAINTAINER/${MAINTAINER}/g" $IDM_FRAMEWORK/pkg/DEBIAN/control
+ sed -i "s/PKGDEPS/${PKGDEPS}/g" $IDM_FRAMEWORK/pkg/DEBIAN/control
+ sed -i "s/SOURCE/${SOURCE}/g" $IDM_FRAMEWORK/pkg//DEBIAN/control
+ cd $IDM_FRAMEWORK/pkg
+ SIZE=`du -c|tail -n1|cut -f1`
+ sed -i "s/SIZE/${SIZE}/" $IDM_FRAMEWORK/pkg/DEBIAN/control
+ 
+ 
+ 
+dpkg-deb -b $IDM_FRAMEWORK/pkg $DEBS/idm-console-framework-$DEBVER-${VERSION}.deb
+}
+
+make_389_console ()
+{
+## CHECK build.properties for proper version setting~!!! 
+
+##################
+#### build 389-console
+##################
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="build-essential ant bzip2"
+	PKGDEPS="java-virtual-machine | java2-runtime, libjss, ldapsdk, idm-console-framework"
+	;;
+ 
+    lenny)
+	#LENNY
+	BUILDDEPS="build-essential ant bzip2 sun-java6-jdk"
+	PKGDEPS="java-virtual-machine | java2-runtime, libjss, ldapsdk, idm-console-framework"
+	;;
+
+    squeeze)
+	#LENNY
+	BUILDDEPS="build-essential ant bzip2 sun-java6-jdk"
+	PKGDEPS="java-virtual-machine | java2-runtime, libjss, ldapsdk, idm-console-framework"
+	;;
+
+    karmic)
+	BUILDDEPS="build-essential ant bzip2 sun-java6-jdk"
+	PKGDEPS="java-virtual-machine | java2-runtime, libjss, ldapsdk, idm-console-framework"
+	;;
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+VERSION=1.1.6
+WORKROOT=$CONSOLE/389-console-$VERSION
+echo "WORKROOT IS $WORKROOT"
+
+
+
+# grab tarball
+[ ! -e $TARBALLS/389-console-$VERSION.tar.bz2 ] && wget $SERVER/$DIRECTORY/389-console-$VERSION.tar.bz2 -O $TARBALLS/389-console-$VERSION.tar.bz2
+
+tar jxvf $TARBALLS/389-console-$VERSION.tar.bz2 -C $CONSOLE
+
+if [ ! -z $NOAPT ]; then
+	apt-get install -y --force-yes $BUILDDEPS
+	echo "o	pen another terminal and install idm-console-framework libjss.deb ldapsdk.deb and press ENTER to continute."
+	echo "It's likely in $DEBS if you're building all the components"
+	read
+
+else
+	apt-get install -y --force-yes $BUILDDEPS idm-console-framework libjss ldapsdk
+fi
+
+read 
+
+mkdir -p $CONSOLE/pkg/usr/share/java/
+mkdir -p $CONSOLE/pkg/usr/bin/
+mkdir -p $CONSOLE/built
+cd $WORKROOT
+
+$ANT 	-Dbuilt.dir=$CONSOLE/built/ \
+	-Dlib.dir=/usr/lib/ \
+	-Dclassdest=/usr/share/java/ \
+	-Dldapjdk.local.location=/usr/share/java/ \
+	-Djss.local.location=/usr/share/java/  
+
+cp $CONSOLE/built/389-console $CONSOLE/pkg/usr/bin/
+chmod 755 $CONSOLE/pkg/usr/bin/389-console
+cp $CONSOLE/built/389-console-${VERSION}_en.jar $CONSOLE/pkg/usr/share/java/
+cd $CONSOLE/pkg/usr/share/java/
+ln -s 389-console-${VERSION}_en.jar 389-console_en.jar
+ln -s 389-console-${VERSION}_en.jar 389-console-1.1_en.jar
+# links might get messy
+
+
+cp -R $SCRIPTDIR/389_console/DEBIAN $CONSOLE/pkg
+sed -i "s/VERSION/${VERSION}/g" $CONSOLE/pkg/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $CONSOLE/pkg/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $CONSOLE/pkg/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $CONSOLE/pkg/DEBIAN/control
+cd $CONSOLE/pkg
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/" $CONSOLE/pkg/DEBIAN/control
+
+dpkg-deb -b $CONSOLE/pkg $DEBS/port389-console-$DEBVER-${VERSION}.deb
+
+}
+
+
+make_389_ds_console ()
+{
+# 
+##################
+#### build 389-ds-console
+##################
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="build-essential ant"
+	PKGDEPS="libjss, ldapsdk, port389-admin"
+	export JAVA_HOME="/usr/lib/jvm/java-1.5.0-sun"
+	;;
+ 
+    lenny)
+	#LENNY
+	BUILDDEPS="build-essential ant sun-java6-jdk"
+	PKGDEPS="libjss, ldapsdk, port389-admin"
+	;;
+
+    squeeze)
+	#SQUEEZE
+	BUILDDEPS="build-essential ant sun-java6-jdk"
+	PKGDEPS="libjss, ldapsdk, port389-admin"
+	;;
+
+    karmic)
+	BUILDDEPS="build-essential ant sun-java6-jdk"
+	PKGDEPS="libjss, ldapsdk, port389-admin"
+	;;
+    
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+VERSION=1.2.4
+WORKROOT=$DS_CONSOLE/389-ds-console-$VERSION
+
+# grab tarball
+[ ! -e $TARBALLS/389-ds-console-$VERSION.tar.bz2 ] && wget $SERVER/$DIRECTORY/389-ds-console-$VERSION.tar.bz2  -O $TARBALLS/389-ds-console-$VERSION.tar.bz2
+
+tar jxvf $TARBALLS/389-ds-console-$VERSION.tar.bz2 -C $DS_CONSOLE
+
+if [ ! -z $NOAPT ]; then
+	apt-get install -y --force-yes $BUILDDEPS
+	echo "open another terminal and install idm-console-framework libjss.deb ldapsdk.deb and press ENTER to continute."
+	echo "It's likely in $DEBS if you're building all the components"
+	read
+
+else
+	apt-get install -y --force-yes $BUILDDEPS  idm-console-framework libjss ldapsdk
+fi
+
+mkdir -p $DS_CONSOLE/pkg/usr/share/dirsrv/html/java/
+mkdir -p $DS_CONSOLE/pkg/usr/share/dirsrv/manual/en/slapd	
+mkdir -p $DS_CONSOLE/built
+
+cd $WORKROOT
+
+$ANT	-Dbuilt.dir=$DS_CONSOLE/built \
+	-Dconsole.location=/usr/share/java/ \
+	-Dldapjdk.location=/usr/share/java/
+
+cd $DS_CONSOLE
+
+cp $DS_CONSOLE/built/package/* $DS_CONSOLE/pkg/usr/share/dirsrv/html/java/
+cp -R $WORKROOT/help/en/* $DS_CONSOLE/pkg/usr/share/dirsrv/manual/en/slapd/
+cd $DS_CONSOLE/pkg/usr/share/dirsrv/html/java/
+
+# old symlinks,  doubt this will work but what the hell,  maybe for backwards compat?
+# ln -s 389-ds-${VERSION}.jar fedora-ds-1.2.jar
+# ln -s 389-ds-${VERSION}.jar fedora-ds.jar
+# ln -s 389-ds-${VERSION}_en.jar fedora-ds-1.2_en.jar
+# ln -s 389-ds-${VERSION}_en.jar fedora-ds_en.jar
+# new symlimks
+ln -s 389-ds-${VERSION}.jar 389-ds-1.2.jar
+ln -s 389-ds-${VERSION}.jar 389-ds.jar
+ln -s 389-ds-${VERSION}_en.jar 389-ds-1.2_en.jar
+ln -s 389-ds-${VERSION}_en.jar 389-ds_en.jar
+
+cp -R $SCRIPTDIR/389_ds_console/DEBIAN $DS_CONSOLE/pkg/
+sed -i "s/VERSION/${VERSION}/g" $DS_CONSOLE/pkg/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $DS_CONSOLE/pkg/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $DS_CONSOLE/pkg/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $DS_CONSOLE/pkg/DEBIAN/control
+cd $DS_CONSOLE/pkg
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/" $DS_CONSOLE/pkg/DEBIAN/control
+
+# make debian package.
+dpkg-deb -b $DS_CONSOLE/pkg $DEBS/port389-ds-console-$DEBVER-${VERSION}.deb
+}
+
+
+
+function make_389_admin_console
+{
+##################
+#### build 389-admin-console
+##################
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="build-essential ant"
+	PKGDEPS="libjss, ldapsdk, port389-admin"
+	export JAVA_HOME="/usr/lib/jvm/java-1.5.0-sun"
+	;;
+ 
+    lenny)
+	#LENNY
+	BUILDDEPS="build-essential ant sun-java6-jdk"
+	PKGDEPS="libjss, ldapsdk, port389-admin"
+	;;
+
+    squeeze)
+	#SQUEEZE
+	BUILDDEPS="build-essential ant sun-java6-jdk"
+	PKGDEPS="libjss, ldapsdk, port389-admin"
+	;;
+
+     karmic)
+	BUILDDEPS="build-essential ant sun-java6-jdk"
+	PKGDEPS="libjss, ldapsdk, port389-admin"
+	;;
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+
+VERSION=1.1.4
+WORKROOT=$ADMIN_CONSOLE/389-admin-console-$VERSION
+
+[ ! -e $TARBALLS/389-admin-console-$VERSION.tar.bz2 ] && wget $SERVER/$DIRECTORY/389-admin-console-$VERSION.tar.bz2  -O $TARBALLS/389-admin-console-$VERSION.tar.bz2
+
+tar jxvf $TARBALLS/389-admin-console-$VERSION.tar.bz2 -C $ADMIN_CONSOLE
+
+if [ ! -z $NOAPT ]; then
+	apt-get install -y --force-yes $BUILDDEPS
+	echo "open another terminal and install idm-console-framework libjss.deb ldapsdk.deb and press ENTER to continute."
+	echo "It's likely in $DEBS if you're building all the components"
+	read
+
+else
+	apt-get install -y --force-yes $BUILDDEPS fedora-idm-console idm-console-framework libjss ldapsdk
+fi
+
+mkdir -p $ADMIN_CONSOLE/pkg/usr/share/dirsrv/html/java/
+mkdir -p $ADMIN_CONSOLE/pkg/usr/share/dirsrv/manual/en/admin
+mkdir -p $ADMIN_CONSOLE/built
+
+cd $WORKROOT
+
+$ANT	-Dbuilt.dir=$ADMIN_CONSOLE/built \
+	-Dconsole.location=/usr/share/java/ \
+	-Dldapjdk.location=/usr/share/java/
+
+cd $ADMIN_CONSOLE
+
+cp $ADMIN_CONSOLE/built/package/* $ADMIN_CONSOLE/pkg/usr/share/dirsrv/html/java/
+cp -R $WORKROOT/help/en/* $ADMIN_CONSOLE/pkg/usr/share/dirsrv/manual/en/admin/
+cd $ADMIN_CONSOLE/pkg/usr/share/dirsrv/html/java/
+
+ln -s 389-admin-${VERSION}.jar 389-admin-1.1.jar
+ln -s 389-admin-${VERSION}.jar 389-admin.jar
+ln -s 389-admin-${VERSION}_en.jar 389-admin-1.1_en.jar
+ln -s 389-admin-${VERSION}_en.jar 389-admin_en.jar
+
+
+
+cp -R $SCRIPTDIR/389_admin_console/DEBIAN $ADMIN_CONSOLE/pkg/
+sed -i "s/VERSION/${VERSION}/g" $ADMIN_CONSOLE/pkg/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $ADMIN_CONSOLE/pkg/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $ADMIN_CONSOLE/pkg/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $ADMIN_CONSOLE/pkg/DEBIAN/control
+cd $ADMIN_CONSOLE/pkg
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/" $ADMIN_CONSOLE/pkg/DEBIAN/control
+
+
+# put it back together
+dpkg-deb -b $ADMIN_CONSOLE/pkg $DEBS/port389-admin-console-$DEBVER-${VERSION}.deb
+
+}
+
+
+
+install_java
+make_jss
+make_ldapsdk
+make_idm_console_framework
+make_389_console
+make_389_ds_console
+make_389_admin_console
+# 
+
+
+
+

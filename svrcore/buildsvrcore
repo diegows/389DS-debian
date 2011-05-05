@@ -1,0 +1,99 @@
+#!/bin/bash	
+#TODO need to fix the svrcore.pc file to remove icu as a dep,  icu-dev debian doesn't provide a pkg-config file!!
+
+source ../config
+SCRIPTDIR=`pwd`
+# delete CVS tmp files and any kate temp filename garbage I might have copied over
+#find $SCRIPTDIR -type d -name CVS -exec rm -rfv \{\} \;
+#find $SCRIPTDIR -name *\~ -exec rm -rfv \{\} \;
+find $SCRIPTDIR -type d -name CVS |xargs rm -rf
+find $SCRIPTDIR -name *\~ |xargs rm -rf
+if [ -z $1 ] 
+then
+	BUILDDIR=/tmp/fdsbuildscripts/svrcore
+else
+	BUILDDIR=$1
+fi
+
+VERSION=4.0.4
+WORKROOT=$BUILDDIR/svrcore-$VERSION/
+DESTDIR=$BUILDDIR/pkg
+
+# make directory if needed
+[ ! -d $BUILDDIR ] && mkdir -p $BUILDDIR
+[ ! -d $DEBS ] && mkdir -p $DEBS
+[ ! -d $DESTDIR ] && mkdir -p $DESTDIR
+[ ! -d $TARBALLS ] && mkdir -p $TARBALLS
+
+
+
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="fakeroot build-essential perl pkg-config libnspr4-0d libnspr4-dev libnss3-0d libnss3-dev libicu36-dev libicu36 bzip2"
+	PKGDEPS="libnspr4-0d,libnss3-0d, libc6"
+	;;
+ 
+    lenny)
+	#LENNY
+	BUILDDEPS="fakeroot build-essential perl pkg-config libnspr4-dev libnss3-1d libnspr4-0d  libnss3-dev libicu-dev libicu38 bzip2"
+	PKGDEPS="libnspr4-0d,libnss3-1d, libc6"
+	;;
+
+     squeeze)
+	#SQUEEZE
+	BUILDDEPS="fakeroot build-essential perl pkg-config libnspr4-dev libnss3-1d libnspr4-0d  libnss3-dev libicu-dev libicu44 bzip2"
+        PKGDEPS="libnspr4-0d,libnss3-1d, libc6"
+	;;
+
+    karmic)
+	BUILDDEPS="fakeroot build-essential perl pkg-config libnspr4-dev libnss3-1d libnspr4-0d  libnss3-dev libicu-dev libicu40 bzip2"
+	PKGDEPS="libnspr4-0d,libnss3-1d, libc6"
+	;;
+
+    lucid)
+        BUILDDEPS="fakeroot build-essential perl pkg-config libnspr4-dev libnss3-1d libnspr4-0d  libnss3-dev libicu-dev libicu42 bzip2"
+        PKGDEPS="libnspr4-0d,libnss3-1d, libc6"
+        ;;
+
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+apt-get install -y --force-yes $BUILDDEPS
+cd $BUILDDIR
+
+# get the source tarball
+# wget or cp
+[ ! -e $TARBALLS/svrcore-$VERSION.tar.bz2 ] && wget $SERVER/$DIRECTORY/svrcore-$VERSION.tar.bz2 -O $TARBALLS/svrcore-$VERSION.tar.bz2
+
+tar jxvf $TARBALLS/svrcore-$VERSION.tar.bz2 -C $BUILDDIR
+
+cd $WORKROOT
+
+./configure --prefix=/ \
+--includedir=/usr/include/ \
+--libdir=/usr/lib/ \
+--with-nss-inc=/usr/include/nss/ \
+--with-nss-lib=/usr/lib/ \
+--with-nspr-inc=/usr/include/nspr/ \
+--with-nspr-lib=/usr/lib/
+ 
+make
+make DESTDIR=$DESTDIR install
+# start debian package control configs
+cp -R $SCRIPTDIR/DEBIAN $DESTDIR
+sed -i "s/VERSION/${VERSION}/g" $DESTDIR/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $DESTDIR/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $DESTDIR/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $DESTDIR/DEBIAN/control
+cd $DESTDIR
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/" $DESTDIR/DEBIAN/control
+
+
+dpkg-deb -b $DESTDIR $DEBS/libsvrcore-$DEBVER-$VERSION.deb
+ 
+

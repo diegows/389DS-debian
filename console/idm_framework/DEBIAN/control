@@ -1,0 +1,14 @@
+Source: SOURCE
+Package: idm-console-framework
+Version: VERSION
+Section: net
+Priority: extra
+Architecture: all
+Depends: PKGDEPS
+Installed-Size: SIZE
+Maintainer: MAINTAINER
+Description: Identity Management Console Framework
+ A Java Management Console framework used for remote server management.
+ .
+
+

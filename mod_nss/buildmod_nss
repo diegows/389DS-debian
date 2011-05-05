@@ -1,0 +1,95 @@
+#!/bin/bash
+
+source ../config
+SCRIPTDIR=`pwd`
+find $SCRIPTDIR -type d -name CVS |xargs rm -rf
+find $SCRIPTDIR -name *\~ |xargs rm -rf
+
+if [ -z $1 ]; then
+	BUILDDIR=/tmp/fdsbuildscripts/mod_nss
+else
+	BUILDDIR=$1
+fi
+
+
+VERSION=1.0.8
+WORKROOT=$BUILDDIR/mod_nss-$VERSION
+MOD_NSS=$BUILDDIR/pkg
+INSTALL=/usr/bin/install
+
+[ ! -d $DEBS ] && mkdir -p $DEBS
+[ ! -d $TARBALLS ] && mkdir -p $TARBALLS
+[ ! -d $BUILDDIR ] && mkdir -p $BUILDDIR
+[ ! -d $MOD_NSS ] && mkdir -p $MOD_NSS
+
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-dev libnss3-0d libicu36 libicu36-dev libldap2-dev libsasl2-dev pkg-config apache2 libssl-dev openssl apache2-threaded-dev libapr1-dev libaprutil1-dev apache2-mpm-worker"
+	PKGDEPS="mozldap, libnspr4-0d, libnss3-0d, apache2"
+	;;
+
+    lenny)
+	#LENNY
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-dev libnss3-1d libicu38 libicu-dev libldap2-dev libsasl2-dev build-essential pkg-config apache2 libssl-dev openssl apache2-threaded-dev libapr1-dev libaprutil1-dev apache2-mpm-worker"
+	PKGDEPS="mozldap, libnspr4-0d, libnss3-1d, apache2"
+	;;
+
+     squeeze)
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-dev libnss3-1d libicu44 libicu-dev libldap2-dev libsasl2-dev build-essential pkg-config apache2 libssl-dev openssl apache2-threaded-dev libapr1-dev libaprutil1-dev apache2-mpm-worker"
+	PKGDEPS="mozldap, libnspr4-0d, libnss3-1d, apache2"
+	;;
+
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+
+# wget the source tarball
+[ ! -e $TARBALLS/mod_nss-$VERSION.tar.gz ] && wget $SERVER/$DIRECTORY/mod_nss-$VERSION.tar.gz -O $TARBALLS/mod_nss-$VERSION.tar.gz
+
+tar zxvf $TARBALLS/mod_nss-$VERSION.tar.gz -C $BUILDDIR
+
+if [ ! -z $NOAPT ]; then
+	apt-get install -y --force-yes $BUILDDEPS
+	echo "open another terminal and install mozldap.deb and mozldap-dev.deb and press ENTER to continute."
+	echo "It's likely in $DEBS if you're building all the components"
+	read
+else
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-dev libnss3-0d mozldap mozldap-dev libicu36 libicu36-dev libldap2-dev libsasl2-dev build-essential pkg-config apache2 libssl-dev openssl apache2-threaded-dev libapr1-dev libaprutil1-dev apache2-mpm-worker"
+	apt-get install -y --force-yes $BUILDDEPS mozldap mozldap-dev
+
+fi
+
+cd $WORKROOT
+CPPFLAGS=`/usr/bin/apxs2 -q CPPFLAGS` ./configure \
+		--prefix=/ \
+		--with-apr-config \
+		--with-apxs=/usr/bin/apxs2 \
+		--with-httpd=/usr/sbin/apache2 \
+		--with-nspr-inc=/usr/include/nspr/ \
+		--with-nspr-lib=/usr/lib/ \
+		--with-nss-inc=/usr/include/nss/ \
+		--with-nss-lib=/usr/lib/ 
+
+make all
+
+	
+mkdir -p $MOD_NSS/usr/lib/apache2/modules/
+mkdir -p $MOD_NSS/sbin
+chmod -R g-s $MOD_NSS
+$INSTALL -m 755 $WORKROOT/.libs/libmodnss.so $MOD_NSS/usr/lib/apache2/modules
+$INSTALL -m 755 $WORKROOT/nss_pcache $MOD_NSS/sbin
+
+cp -R $SCRIPTDIR/DEBIAN $MOD_NSS
+sed -i "s/VERSION/${VERSION}/g" $MOD_NSS/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $MOD_NSS/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $MOD_NSS/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $MOD_NSS/DEBIAN/control
+cd $MOD_NSS
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/" $MOD_NSS/DEBIAN/control
+
+dpkg-deb -b $MOD_NSS $DEBS/libapache2-mod-nss-$DEBVER-$VERSION.deb

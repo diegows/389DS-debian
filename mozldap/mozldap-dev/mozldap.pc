@@ -1,0 +1,16 @@
+prefix=/
+exec_prefix=/
+libdir=/usr/lib
+includedir=/usr/include/mozldap
+bindir=/usr/lib/mozldap
+major=6
+minor=0
+submin=5
+libsuffix=60
+
+Name: mozldap
+Description: Mozilla LDAP C SDK
+Version: 6.0.5
+Requires: nspr >= 4.6 , nss >= 1.8.0.13pre
+Libs: -lssldap60 -lprldap60 -lldap60
+Cflags: -I${includedir}

@@ -1,0 +1,108 @@
+#!/bin/bash
+# need to fix adminutil.pc,  a dep is icu which doesn't provide a .pc
+
+source ../config
+SCRIPTDIR=`pwd`
+find $SCRIPTDIR -type d -name CVS |xargs rm -rf
+find $SCRIPTDIR -name *\~ |xargs rm -rf
+
+
+if [ -z $1 ]; then
+	BUILDDIR=/tmp/fdsbuildscripts/adminutil
+else
+	BUILDDIR=$1
+fi
+
+VERSION=1.1.13
+DESTDIR=$BUILDDIR/pkg
+WORKROOT=$BUILDDIR/389-adminutil-$VERSION
+
+[ ! -d $DEBS ] && mkdir -p $DEBS
+[ ! -d $TARBALLS ] && mkdir -p $TARBALLS
+[ ! -d $BUILDDIR ] && mkdir -p $BUILDDIR
+[ ! -d $DESTDIR ] && mkdir -p $DESTDIR
+
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="fakeroot perl libnspr4-0d libnss3-dev libnspr4-dev libnss3-0d libldap2-dev libsasl2-dev libicu36 libicu36-dev pkg-config"
+	PKGDEPS="libc6, libnspr4-0d, libnss3-0d, mozldap, libicu36, libsasl2, perldap"
+	;;
+ 
+    lenny)
+	#LENNY
+	BUILDDEPS="fakeroot perl libnspr4-0d libnss3-dev libnspr4-dev libnss3-1d libldap2-dev libsasl2-dev libicu38 libicu-dev pkg-config"
+	PKGDEPS="libc6, libnspr4-0d, libnss3-1d, mozldap, libicu38, libsasl2-2, perldap"
+	;;
+
+    squeeze)
+        #SQUEEZE
+        BUILDDEPS="fakeroot perl libnspr4-0d libnss3-dev libnspr4-dev libnss3-1d libldap2-dev libsasl2-dev libicu44 libicu-dev pkg-config"
+        PKGDEPS="libc6, libnspr4-0d, libnss3-1d, mozldap, libicu44, libsasl2-2, perldap"
+        ;;
+
+
+     karmic)
+	BUILDDEPS="perl fakeroot libnspr4-0d libnss3-dev libnspr4-0d libnss3-1d  libicu40 libicu-dev  libldap2-dev libsasl2-dev pkg-config"
+	PKGDEPS="libc6, libnspr4-0d, libnss3-1d, mozldap, libicu40, libsasl2-2, perldap"
+	;;
+
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+
+# wget the source tarball
+[ ! -e /usr/src/tarballs/389-adminutil-$VERSION.tar.bz2 ] && wget $SERVER/$DIRECTORY/389-adminutil-$VERSION.tar.bz2 -O /usr/src/tarballs/389-adminutil-$VERSION.tar.bz2
+
+tar jxvf $TARBALLS/389-adminutil-$VERSION.tar.bz2 -C $BUILDDIR
+
+if [ ! -z $NOAPT ]; then
+	apt-get install -y --force-yes $BUILDDEPS
+	echo "open another terminal and install mozldap.deb, mozldap-dev.deb and perldap.deb and press ENTER to continute."
+	echo "It's likely in $DEBS if you're building all the components"
+	read
+
+else
+	apt-get install -y --force-yes $BUILDDEPS mozldap mozldap-dev perldap
+fi
+
+cd $WORKROOT
+# configure will use pkg-config to detect nss,nspr,icu and mozldap.
+./configure 	--localstatedir=/var \
+		--sysconfdir=/etc  \
+		--datadir=/usr/share \
+		--libdir=/usr/lib \
+		--includedir=/usr/include  \
+		--oldincludedir=/usr/include \
+		--with-nss-inc=/usr/include/nss/ \
+		--with-nss-lib=/usr/lib/ \
+		--with-nspr-inc=/usr/include/nspr/ \
+		--with-nspr-lib=/usr/lib/ \
+		--with-ldapsdk-inc=/usr/include/mozldap/ \
+		--with-ldapsdk-lib=/usr/lib/ \
+		--with-icu-inc=/usr/include/ \
+		--with-icu-lib=/usr/lib \
+		--with-icu-bin=/usr/bin \
+		--with-sasl 
+
+make
+make DESTDIR=$DESTDIR install
+cp -R $SCRIPTDIR/DEBIAN $DESTDIR
+sed -i "s/VERSION/${VERSION}/g" $DESTDIR/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $DESTDIR/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $DESTDIR/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $DESTDIR/DEBIAN/control
+cd $DESTDIR
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/" $DESTDIR/DEBIAN/control
+
+
+# adminutil adds icu as a dep in the pkgconfig file,  icu's debian package doesn't provide a .pc so it causes problems
+sed -i 's/\, icu//g' $DESTDIR/usr/lib/pkgconfig/389-adminutil.pc
+
+dpkg-deb -b $DESTDIR $DEBS/port389-adminutil-$DEBVER-$VERSION.deb
+	
+

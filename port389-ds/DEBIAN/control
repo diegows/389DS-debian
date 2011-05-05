@@ -1,0 +1,14 @@
+Source: SOURCE
+Package: port389-ds-base
+Version: VERSION
+Section: net
+Priority: extra
+Architecture: amd64
+Depends: PKGDEPS
+Installed-Size: SIZE
+Maintainer: MAINTAINER
+Description:  Fedora Directory Server (base)
+ Fedora Directory Server is an LDAPv3 compliant server.  The base package includes
+ the LDAP server and command line utilities for server administration.
+
+

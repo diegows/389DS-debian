@@ -1,0 +1,69 @@
+Debian Building/Packaging scripts for 389
+Ryan Braun 
+ryan.braun@ec.gc.ca
+
+
+I recommend building these packages in a VM or some other machine as they will be pulling in a bunch of extra requirements for building.  That and the console script will try to configure the java jdk for you.  So make sure you run these on non operatioal systems.  Or at least go through them to make sure they won't break your stuff.  
+
+Also,  I've made the package names for the various packages as follows.
+
+port389-ds-base
+mozldap
+mozldap-dev
+mozldap-tools
+libsvrcore
+perldap
+
+libapache2-mod-nss
+port389-admin
+port389-adminutil
+
+idm-console-framework
+port389-console
+port389-ds-console
+port389-admin-console
+ldapsdk
+libjss
+
+
+The config file is pretty straightforward.  
+
+Set NOAPT to 1,  unless you want apt to resolve 389 dependancies.  Unless you have 389 packages in your own apt repo, set this to 1.  the scripts will pause and you can then install the required packages manually before continuing
+SOURCE and MAINTAINER are used in the package's control file ($pkgname/DEBIAN/control)
+TARBALLS AND DEBS defines the directories to hold 389 source tarballs and the build debs.
+
+DEBVER is the distribution target your building.  Currently etch,lenny,squeeze,karmic and lucid.
+
+In each script,  make sure the version variable is set to the proper version you want to build.
+
+Each script is pretty much laid out the same.
+
+set dependancies
+wget tarball
+run configure
+make
+make DESTDIR
+run any postinstall bits
+build .deb
+
+
+The scripts must be run in proper order.
+
+Build the directory server in the following order
+
+svrcore
+mozldap
+perldap
+port389-ds
+
+Build the admin server in the followin order
+
+mod_nss
+port389-adminutil
+port389-admin
+
+Then build the console.
+
+The console script will use ant and sun java packages to build the java bits.  jss libs are wgotten and built into a package.  ldapsdk is alien'd into a deb from the original rpm.
+
+

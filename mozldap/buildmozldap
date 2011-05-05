@@ -1,0 +1,208 @@
+#!/bin/bash
+
+source ../config
+SCRIPTDIR=`pwd`
+find $SCRIPTDIR -type d -name CVS |xargs rm -rf
+find $SCRIPTDIR -name *\~ |xargs rm -rf
+
+if [ -z $1 ]; then
+	BUILDDIR=/tmp/fdsbuildscripts/mozldap
+else
+	BUILDDIR=$1
+fi
+
+VERSION=6.0.5
+WORKDIR=$BUILDDIR/mozldap-$VERSION/mozilla/directory/c-sdk
+WORKROOT=$BUILDDIR/mozldap-$VERSION
+
+[ ! -d $BUILDDIR ] && mkdir -p $BUILDDIR
+[ ! -d $DEBS ] && mkdir -p $DEBS
+[ ! -d $TARBALLS ] && mkdir -p $TARBALLS
+
+
+# wget the source tarball
+[ ! -e $TARBALLS/mozldap-$VERSION.tar.gz ] && wget $SERVER/$DIRECTORY/mozldap-$VERSION.tar.gz -O $TARBALLS/mozldap-$VERSION.tar.gz
+
+tar zxvf $TARBALLS/mozldap-$VERSION.tar.gz -C $BUILDDIR
+
+
+INSTALL=/usr/bin/install
+
+MOZLDAP=$BUILDDIR/mozldap
+MOZLDAP_DEV=$BUILDDIR/mozldap-dev
+MOZLDAP_TOOLS=$BUILDDIR/mozldap-tools
+
+
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="perl build-essential pkg-config libnspr4-0d libnss3-dev libnspr4-0d libnss3-0d libsasl2-dev bzip2"
+	# initial pkgdeps for the mozldap package,  not mozldap-dev or -tools
+	PKGDEPS="libc6, libsasl2-2, libnspr4-0d, libnss3-0d, libsvrcore"
+
+	;;
+ 
+    lenny)
+	#LENNY
+	# need to add symlink from /usr/lib/nss/libsofttokn3.so /usr/lib/
+	BUILDDEPS="perl build-essential pkg-config libnspr4-0d libnss3-dev libnspr4-dev libnss3-1d libsasl2-dev bzip2 libsasl2-2 "
+	PKGDEPS="libc6, libsasl2-2, libnspr4-0d, libnss3-1d, libsvrcore"
+	# some kind of bustage with libsoftokn3.so not resolving.  so symlink it for now
+	ln -s /usr/lib/nss/libsoftokn3.so /usr/lib
+	;;
+
+     squeeze)
+	#SQUEEZE
+	BUILDDEPS="perl build-essential pkg-config libnspr4-0d libnss3-dev libnspr4-dev libnss3-1d libsasl2-dev bzip2 libsasl2-2 "
+	PKGDEPS="libc6, libsasl2-2, libnspr4-0d, libnss3-1d, libsvrcore"
+	ln -s /usr/lib/nss/libsoftokn3.so /usr/lib
+	;;
+
+    karmic)
+	BUILDDEPS="perl build-essential pkg-config libnspr4-0d libnss3-dev libnspr4-dev libnss3-1d libsasl2-dev bzip2 libsasl2-2 "
+	PKGDEPS="libc6, libsasl2-2, libnspr4-0d, libnss3-1d, libsvrcore"
+	# some kind of bustage with libsoftokn3.so not resolving.  so symlink it for now
+	ln -s /usr/lib/nss/libsoftokn3.so /usr/lib
+	;;
+
+    lucid)
+        BUILDDEPS="perl build-essential pkg-config libnspr4-0d libnss3-dev libnspr4-dev libnss3-1d libsasl2-dev bzip2 libsasl2-2 "
+        PKGDEPS="libc6, libsasl2-2, libnspr4-0d, libnss3-1d, libsvrcore"
+        # some kind of bustage with libsoftokn3.so not resolving.  so symlink it for now
+        ln -s /usr/lib/nss/libsoftokn3.so /usr/lib
+        ;;
+
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+if [ ! -z $NOAPT ] ; then
+	apt-get install -y --force-yes $BUILDDEPS
+	echo "open another terminal and install libsvrcore.deb now and hit enter to continue"
+	echo "It's likely in $DEBS if you're building all the components"
+	read
+else 
+	apt-get install -y --force-yes $BUILDDEPS libsvrcore
+fi
+
+
+cd $WORKDIR
+make clean
+
+# TODO  you need to symlink /usr/lib/nss/libsoftokn39393 to /usr/lib/libsoftoaskaskj in lenny,  i think that might be a perldap issue,  not mozldap.
+
+# configure
+./configure --prefix=/ \
+--libdir=/usr/lib/ \
+--includedir=/usr/include/mozldap \
+--oldincludedir=/usr/include/mozldap \
+--sysconfdir=/usr/share/mozldap/etc/  \
+--bindir=/usr/lib/mozldap/ \
+--enable-clu \
+--with-nss-inc=/usr/include/nss/ \
+--with-nss-lib=/usr/lib/ \
+--with-nspr-inc=/usr/include/nspr/ \
+--with-nspr-lib=/usr/lib/ \
+--with-svrcore-inc=/usr/include \
+--with-svrcore-lib=/usr/lib \
+--with-sasl 
+
+
+# build,  which will also install the files to $BUILDDIR/../../dist/ automatically blargh
+make
+
+
+# delete any old directories
+rm -rf $MOZLDAP $MOZLDAP_DEV $MOZLDAP_TOOLS
+mkdir -p $MOZLDAP $MOZLDAP_DEV $MOZLDAP_TOOLS
+
+# blow away any CVS entries that might mess up the packaging
+find $BUILDDIR -name CVS | xargs rm -rf 
+
+# pull the files out of $BUILDDIR/../../dist/ manually
+
+# mozldap first
+mkdir -p $MOZLDAP/usr/lib
+mkdir -p $MOZLDAP/usr/share/doc/mozldap-$VERSION
+#cp -R $SCRIPTDIR/mozldap/DEBIAN $MOZLDAP
+chmod -R g-s $MOZLDAP
+# Copy the binary libraries we want
+for file in libssldap60.so libprldap60.so libldap60.so libldif60.so; 
+do 
+	$INSTALL -m 755 $WORKROOT/mozilla/dist/lib/$file $MOZLDAP/usr/lib;
+done
+# copy over mozldap DEBIAN structure
+
+cp -R $SCRIPTDIR/mozldap/DEBIAN $MOZLDAP
+sed -i "s/VERSION/${VERSION}/g" $MOZLDAP/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $MOZLDAP/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $MOZLDAP/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $MOZLDAP/DEBIAN/control
+cd $MOZLDAP
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/g" $MOZLDAP/DEBIAN/control
+
+chown -R root.root  $MOZLDAP
+
+# mozldap-dev
+mkdir -p $MOZLDAP_DEV/usr/include/mozldap
+mkdir -p $MOZLDAP_DEV/usr/lib/pkgconfig
+mkdir -p $MOZLDAP_DEV/usr/share/mozldap/etc
+mkdir -p $MOZLDAP_DEV/usr/share/mozldap/examples
+
+# copy over mozldap.pc
+for file in $WORKROOT/mozilla/dist/public/ldap/*.h ; 
+do 
+	$INSTALL -p -m 644 $file $MOZLDAP_DEV/usr/include/mozldap/ ; 
+done
+
+# Copy the developer files
+cp -r $WORKROOT/mozilla/directory/c-sdk/ldap/examples $MOZLDAP_DEV/usr/share/mozldap
+$INSTALL -m 644 $WORKROOT/mozilla/directory/c-sdk/ldap/examples/xmplflt.conf $MOZLDAP_DEV/usr/share/mozldap/etc
+$INSTALL -m 644 $WORKROOT/mozilla/directory/c-sdk/ldap/libraries/libldap/ldaptemplates.conf $MOZLDAP_DEV/usr/share/mozldap/etc
+$INSTALL -m 644 $WORKROOT/mozilla/directory/c-sdk/ldap/libraries/libldap/ldapfilter.conf $MOZLDAP_DEV/usr/share/mozldap/etc
+$INSTALL -m 644 $WORKROOT/mozilla/directory/c-sdk/ldap/libraries/libldap/ldapsearchprefs.conf $MOZLDAP_DEV/usr/share/mozldap/etc
+
+cp $SCRIPTDIR/mozldap-dev/mozldap.pc $MOZLDAP_DEV/usr/lib/pkgconfig
+# copy over mozldap-dev DEBIAN structure
+PKGDEPS="mozldap"
+cp -R $SCRIPTDIR/mozldap-dev/DEBIAN $MOZLDAP_DEV
+sed -i "s/VERSION/${VERSION}/g" $MOZLDAP_DEV/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $MOZLDAP_DEV/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $MOZLDAP_DEV/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $MOZLDAP_DEV/DEBIAN/control
+cd $MOZLDAP_DEV
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/g" $MOZLDAP_DEV/DEBIAN/control
+
+chmod -R g-s $MOZLDAP_DEV
+chown -R root.root $MOZLDAP_DEV
+
+
+# mozldap-tools
+mkdir -p $MOZLDAP_TOOLS/usr/lib/mozldap
+for file in ldapsearch ldapmodify ldapdelete ldapcmp ldapcompare ldappasswd ; 
+do
+	$INSTALL -m 755 $WORKROOT/mozilla/dist/bin/$file $MOZLDAP_TOOLS/usr/lib/mozldap ; 
+done
+# copy over mozldap-tools DEBIAN structure
+cp -R $SCRIPTDIR/mozldap-tools/DEBIAN $MOZLDAP_TOOLS
+PKGDEPS="mozldap"
+sed -i "s/VERSION/${VERSION}/g" $MOZLDAP_TOOLS/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $MOZLDAP_TOOLS/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $MOZLDAP_TOOLS/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $MOZLDAP_TOOLS/DEBIAN/control
+cd $MOZLDAP_TOOLS
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/g" $MOZLDAP_TOOLS/DEBIAN/control
+chmod -R g-s $MOZLDAP_TOOLS
+chown -R root.root $MOZLDAP_TOOLS
+
+# create the debs
+
+dpkg-deb --build $MOZLDAP $DEBS/mozldap-$DEBVER-$VERSION.deb
+dpkg-deb --build $MOZLDAP_DEV $DEBS/mozldap-dev-$DEBVER-$VERSION.deb
+dpkg-deb --build $MOZLDAP_TOOLS $DEBS/mozldap-tools-$DEBVER-$VERSION.deb
+

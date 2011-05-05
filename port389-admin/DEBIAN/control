@@ -1,0 +1,16 @@
+Source:	SOURCE
+Package: port389-admin
+Version: VERSION
+Section: net
+Priority: extra
+Architecture: amd64
+Depends: PKGDEPS
+Installed-Size: SIZE
+Maintainer: MAINTAINER
+Description: Fedora Administration Server (admin)
+ Fedora Administration Server is an HTTP agent that provides management features
+ for Fedora Directory Server.  It provides some management web apps that can
+ be used through a web browser.  It provides the authentication, access control,
+ and CGI utilities used by the console.
+ .
+

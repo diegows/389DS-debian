@@ -1,0 +1,16 @@
+# whether to use apt to resolve all dependancies,  even fds ones.  set to 1
+# unless you're running your own apt repo with prebuilt fds debian packages.
+NOAPT=1
+# location of fds sources
+SERVER="http://directory.fedoraproject.org"
+DIRECTORY="sources"
+# set tarball directory
+TARBALLS=/usr/src/tarballs
+# set location to save built debs to
+DEBS=/usr/src/debs
+# maintainer email address to add to the package (don't have any spaces right now)
+MAINTAINER="dxw@woitasen.com"
+# debian version to build for .  either etch,lenny, squeeze, karmic or lucid
+DEBVER=squeeze
+# source of the package. 
+SOURCE=misc

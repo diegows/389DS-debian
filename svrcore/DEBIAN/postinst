@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+# Automatically added by dh_makeshlibs
+if [ "$1" = "configure" ]; then
+	ldconfig
+fi
+# End automatically added section
+# create symlink
+[ ! -h /usr/lib/pkgconfig/svrcore-devel.pc ] && cd /usr/lib/pkgconfig; ln -s svrcore.pc svrcore-devel.pc

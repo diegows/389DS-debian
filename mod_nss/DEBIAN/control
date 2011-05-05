@@ -1,0 +1,14 @@
+Source: SOURCE
+Package: libapache2-mod-nss
+Version: VERSION
+Section: net
+Priority: extra
+Architecture: amd64
+Depends: PKGDEPS
+Installed-Size: SIZE
+Maintainer: MAINTAINER
+Description:  mod_nss is an SSL provider derived from the mod_ssl module 
+ for the Apache web server that uses the Network Security Services (NSS) 
+ libraries. We started with mod_ssl and replaced the OpenSSL calls with 
+ NSS calls.
+

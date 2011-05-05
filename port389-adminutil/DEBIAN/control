@@ -1,0 +1,23 @@
+Source: SOURCE
+Package: port389-adminutil
+Version: VERSION
+Section: net
+Priority: extra
+Architecture: amd64
+Depends: PKGDEPS
+Installed-Size: SIZE
+Maintainer: MAINTAINER
+Description: Utility library for directory server administration
+ adminutil is libraries of functions used to administer directory
+ servers, usually in conjunction with the admin server.  adminutil is
+ broken into two libraries - libadminutil contains the basic
+ functionality, and libadmsslutil contains SSL versions and wrappers
+ around the basic functions.  The PSET functions allow applications to
+ store their preferences and configuration parameters in LDAP, without
+ having to know anything about LDAP.  The configuration is cached in a
+ local file, allowing applications to function even if the LDAP server
+ is down.  The other code is typically used by CGI programs used for
+ directory server management, containing GET/POST processing code as
+ well as resource handling (ICU ures API).
+ .
+

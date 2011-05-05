@@ -1,0 +1,131 @@
+#!/bin/bash
+
+source ../config
+SCRIPTDIR=`pwd`
+find $SCRIPTDIR -type d -name CVS |xargs rm -rf
+find $SCRIPTDIR -name *\~ |xargs rm -rf
+
+if [ -z $1 ]; then
+	BUILDDIR=/tmp/fdsbuildscripts/port389-base
+else
+	BUILDDIR=$1
+fi
+
+VERSION=1.2.8.2-diegows
+#VERSION=1.2.9
+WORKROOT=$BUILDDIR/389-ds-base-$VERSION
+FDSDIR=$BUILDDIR/pkg
+
+
+[ ! -d $DEBS ] && mkdir -p $DEBS
+[ ! -d $TARBALLS ] && mkdir -p $TARBALLS
+[ ! -d $BUILDDIR ] && mkdir -p $BUILDDIR
+[ ! -d $FDSDIR ] && mkdir -p $FDSDIR
+
+case $DEBVER in
+
+    etch)
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-0d libdb4.4 libdb4.4-dev libicu36 libicu36-dev libsnmp-base libsnmp9 libsnmp9-dev lm-sensors libapr1-dev libpam0g-dev libaprutil1-dev libldap2-dev libsasl2-dev pkg-config libperl-dev krb5-config"
+	PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-0d, libnss3-tools, perl, libsvrcore,  libicu36, libdb4.4, libsnmp-base, libsnmp9, libsasl2"
+	;;
+ 
+    lenny)
+	#LENNY
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-1d libdb4.6 libdb4.6-dev libicu38 libicu-dev libsnmp-base libsnmp15 libsnmp-dev lm-sensors libapr1-dev libpam0g-dev libaprutil1-dev libldap2-dev libsasl2-dev pkg-config libperl-dev krb5-config"
+	PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-1d, libnss3-tools, perl, libsvrcore,  libicu38, libdb4.6, libsnmp-base, libsnmp15, libsasl2-2"
+	;;
+
+     squeeze)
+        #LENNY
+        BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-1d libdb4.8 libdb4.8-dev libicu44 libicu-dev libsnmp-base libsnmp15 libsnmp-dev lm-sensors libapr1-dev libpam0g-dev libaprutil1-dev libldap2-dev libsasl2-dev pkg-config libperl-dev krb5-config"
+        PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-1d, libnss3-tools, perl, libsvrcore,  libicu44, libdb4.8, libsnmp-base, libsnmp15, libsasl2-2"
+        ;;
+
+
+    karmic)
+	BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-1d libdb4.7 libdb4.7-dev libicu40 libicu-dev libsnmp-base libsnmp15 libsnmp-dev lm-sensors libapr1-dev libpam0g-dev libaprutil1-dev libldap2-dev libsasl2-dev pkg-config libperl-dev krb5-config"
+	PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-1d, libnss3-tools, perl, libsvrcore,  libicu40, libdb4.7, libsnmp-base, libsnmp15, libsasl2-2"
+	;;
+
+    lucid)
+        BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-1d libdb4.8 libdb4.8-dev libicu42 libicu-dev libsnmp-base libsnmp15 libsnmp-dev lm-sensors libapr1-dev libpam0g-dev libaprutil1-dev libldap2-dev libsasl2-dev pkg-config libperl-dev krb5-config"
+        PKGDEPS="mozldap, mozldap-tools, libnspr4-0d, libnss3-1d, libnss3-tools, perl, libsvrcore,  libicu42, libdb4.8, libsnmp-base, libsnmp15, libsasl2-2"
+        ;;
+
+
+    *)
+	echo "You have entered a bad debian version. ->$DEBVER<-.  Quitting.";
+	exit 1
+
+esac
+
+
+
+# get the source tarball
+# wget or cp
+[ ! -e /usr/src/tarballs/389-ds-base-$VERSION.tar.bz2 ] && wget $SERVER/$DIRECTORY/389-ds-base-$VERSION.tar.bz2 -O /usr/src/tarballs/389-ds-base-$VERSION.tar.bz2
+
+tar jxvf $TARBALLS/389-ds-base-$VERSION.tar.bz2 -C $BUILDDIR
+
+if [ ! -z $NOAPT ]; then
+	echo "here are the builddeps $BUILDDEPS"
+	apt-get install -y --force-yes $BUILDDEPS
+	echo "open another terminal and install mozldap.deb, mozldap-dev.deb, svrcore.deb and perldap.deb and press ENTER to continute."
+	echo "It's likely in $DEBS if you're building all the components"
+	read
+
+else
+	#BUILDDEPS="perl libnspr4-0d libnss3-dev libnspr4-0d libnss3-0d svrcore perldap mozldap mozldap-dev libdb4.4++ libdb4.4++-dev libdb4.4 libdb4.4-dev libicu36 libicu36-dev libsnmp-base libsnmp9 libsnmp9-dev lm-sensors libapr1-dev libpam0g-dev libaprutil1-dev libldap2-dev libsasl2-dev build-essential pkg-config libperl-dev"
+	apt-get install -y --force-yes $BUILDDEPS
+fi
+
+cd $WORKROOT
+
+make clean
+
+# configure
+CPPFLAGS=-DNETSNMP_USE_INLINE=1 ./configure  \
+--prefix=/opt/dirsrv  \
+--enable-bundle  \
+--localstatedir=/var  \
+--sysconfdir=/etc  \
+--datadir=/usr/share  \
+--mandir=/usr/share/man \
+--with-svrcore-inc=/usr/include \
+--with-svrcore-lib=/usr/lib \
+--with-ldapsdk-inc=/usr/include/mozldap/ \
+--with-ldapsdk-lib=/usr/lib/ \
+--with-ldapsdk-bin=/usr/lib/mozldap \
+--with-nss-inc=/usr/include/nss/ \
+--with-nss-lib=/usr/lib/ \
+--with-nspr-inc=/usr/include/nspr/ \
+--with-nspr-lib=/usr/lib/ \
+--with-icu-inc=/usr/include/unicode \
+--with-icu-lib=/usr/lib \
+--with-icu-bin=/usr/bin \
+--with-sasl \
+--with-kerberos
+#--with-netsnmp=/usr/lib \
+#--with-netsnmp-inc=/usr/include/net-snmp \
+#--with-netsnmp-lib=/usr/lib \
+# --with-svrcore \
+make
+
+make DESTDIR=$FDSDIR install
+
+# debianize some file structure
+mv $FDSDIR/etc/rc.d/init.d $FDSDIR/etc/
+rm -rf $FDSDIR/etc/rc.d
+# make control files
+cp -R $SCRIPTDIR/DEBIAN $FDSDIR
+sed -i "s/VERSION/${VERSION}/g" $FDSDIR/DEBIAN/control
+sed -i "s/MAINTAINER/${MAINTAINER}/g" $FDSDIR/DEBIAN/control
+sed -i "s/PKGDEPS/${PKGDEPS}/g" $FDSDIR/DEBIAN/control
+sed -i "s/SOURCE/${SOURCE}/g" $FDSDIR/DEBIAN/control
+cd $FDSDIR
+SIZE=`du -c|tail -n1|cut -f1`
+sed -i "s/SIZE/${SIZE}/" $FDSDIR/DEBIAN/control
+
+dpkg-deb --build $FDSDIR $DEBS/port389-ds-base-$DEBVER-$VERSION.deb
+
+
