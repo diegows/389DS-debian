@@ -4,6 +4,8 @@ ryan.braun@ec.gc.ca
 
 Maitained by: Diego Woitasen <diego@woitasen.com.ar>
 
+Quickstart: http://directory.fedoraproject.org/wiki/Howto:DebianPackages
+
 
 I recommend building these packages in a VM or some other machine as they will be pulling in a bunch of extra requirements for building.  That and the console script will try to configure the java jdk for you.  So make sure you run these on non operatioal systems.  Or at least go through them to make sure they won't break your stuff.  
 
